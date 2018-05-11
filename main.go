@@ -53,6 +53,8 @@ const (
 	JujuBootstrapError = "JujuBootstrapError"
 	// DeleteComplete is displayed in the resource status field when a delete is complete
 	DeleteComplete = "DeleteComplete"
+	// DeleteError is displayed in the resource status field when a delete fails
+	DeleteError = "DeleteError"
 	// MaasEndpoint will show the endpoint to use for Maas - This will be input in the future
 	MaasEndpoint = "http://192.168.2.24/MAAS/api/2.0"
 	// JujuBundle is the bundle used to create the cluster - This will be input in the future
@@ -285,10 +287,13 @@ func (c *Controller) processCreatedState(kc *samsungv1alpha1.KrakenCluster) erro
 func (c *Controller) processDeletingState(kc *samsungv1alpha1.KrakenCluster) error {
 	glog.Infof("Processing Deleting state for '%s'", kc.Spec.Cluster.ClusterName)
 	status := DeleteComplete
-	if kc.Status.Status == JujuBootstrapReady {
+	if kc.Status.Status == JujuBootstrapReady || kc.Status.Status == JujuBootstrapError {
 		// this call blocks
-		c.deleteCluster(kc)
-		err := c.updateKrakenClusterStatus(kc, samsungv1alpha1.Deleting, status, nil)
+		err := c.deleteCluster(kc)
+		if err != nil {
+			status = DeleteError
+		}
+		err = c.updateKrakenClusterStatus(kc, samsungv1alpha1.Deleting, status, nil)
 		if err != nil {
 			return err
 		}
@@ -300,7 +305,7 @@ func (c *Controller) processDeletingState(kc *samsungv1alpha1.KrakenCluster) err
 				return err
 			}
 		}
-	} else if kc.Status.Status == JujuBootstrapError {
+	} else if kc.Status.Status == DeleteError {
 		// allow the delete to finish
 		err := c.updateKrakenClusterStatus(kc, samsungv1alpha1.Deleted, string(samsungv1alpha1.Deleted), nil)
 		if err != nil {
